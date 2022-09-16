@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AirbnbTest.Models;
+using ExcelHelperExe;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -255,26 +256,44 @@ namespace AirbnbTest.Services
             var json = await _client.GetHtml($"https://www.airbnb.com/api/v3/StaysPdpSections?operationName=StaysPdpSections&locale=en&currency=USD&variables={{\"id\":\"{id}\",\"pdpSectionsRequest\":{{\"adults\":\"1\",\"bypassTargetings\":false,\"categoryTag\":null,\"causeId\":null,\"children\":null,\"disasterId\":null,\"discountedGuestFeeVersion\":null,\"displayExtensions\":null,\"federatedSearchId\":null,\"forceBoostPriorityMessageType\":null,\"infants\":null,\"interactionType\":null,\"layouts\":[\"SIDEBAR\",\"SINGLE_COLUMN\"],\"pets\":0,\"pdpTypeOverride\":null,\"preview\":false,\"previousStateCheckIn\":null,\"previousStateCheckOut\":null,\"priceDropSource\":null,\"privateBooking\":false,\"promotionUuid\":null,\"relaxedAmenityIds\":null,\"searchId\":null,\"selectedCancellationPolicyId\":null,\"selectedRatePlanId\":null,\"splitStays\":null,\"staysBookingMigrationEnabled\":false,\"translateUgc\":null,\"useNewSectionWrapperApi\":false,\"sectionIds\":null,\"checkIn\":null,\"checkOut\":null}}}}&extensions={{\"persistedQuery\":{{\"version\":1,\"sha256Hash\":\"1b84beaefb598f1c33e59d02457e55b4656afc27e3aac5bdfabbc5c173561130\"}}}}");
             var obj = JObject.Parse(json);
             var title = (string)obj.SelectToken("$..sections[?(@.sectionId=='AVAILABILITY_CALENDAR_DEFAULT')].section.listingTitle");
-            var rating = (decimal)obj.SelectToken("$..sections[?(@.sectionId=='REVIEWS_DEFAULT')].section.overallRating");
+            var rating = (decimal?)obj.SelectToken("$..sections[?(@.sectionId=='REVIEWS_DEFAULT')].section.overallRating");
             // var price = (decimal)obj.SelectToken("$..sections[?(@.sectionId=='BOOK_IT_SIDEBAR')].section.structuredDisplayPrice.primaryLine.price");
-            var reviewsCount = (int)obj.SelectToken("$..sections[?(@.sectionId=='REVIEWS_DEFAULT')].section.overallCount");
+            var reviewsCount = (int?)obj.SelectToken("$..sections[?(@.sectionId=='REVIEWS_DEFAULT')].section.overallCount");
             var locationNode = obj.SelectToken("$..sections[?(@.sectionId=='LOCATION_DEFAULT')].section");
-            var location = (string)locationNode.SelectToken("['seeAllLocationDetails'][0]['title']");
+            if(locationNode==null) 
+                throw new KnownException("null location " + listingId);
+            string location=null;
+                location= (string)locationNode.SelectToken("subtitle");//['seeAllLocationDetails'][0]['title']
             var lat = (decimal)locationNode.SelectToken("['lat']");
             var lng = (decimal)locationNode.SelectToken("['lng']");
             var roomType = (string)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['roomType']");
             var isSuperHost = (bool)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['isSuperhost']");
-            var locationRating = (decimal)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['locationRating']");
-            var checkingRating = (decimal)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['checkinRating']");
-            var accuracyRating = (decimal)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['accuracyRating']");
-            var cleanlinessRating = (decimal)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['cleanlinessRating']");
-            var valueRating = (decimal)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['valueRating']");
-            var communicationRating = (decimal)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['communicationRating']");
+            var locationRating = (decimal?)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['locationRating']");
+            var checkingRating = (decimal?)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['checkinRating']");
+            var accuracyRating = (decimal?)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['accuracyRating']");
+            var cleanlinessRating = (decimal?)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['cleanlinessRating']");
+            var valueRating = (decimal?)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['valueRating']");
+            var communicationRating = (decimal?)obj.SelectToken("['data']['presentation']['stayProductDetailPage']['sections']['metadata']['loggingContext']['eventDataLogging']['communicationRating']");
             var detailsNodes = obj.SelectToken("$..sections[?(@.sectionId=='OVERVIEW_DEFAULT')].section.detailItems").Select(x => (string)x.SelectToken("title")).ToList();
-            var guests = detailsNodes[0];
-            var bedrooms = detailsNodes[1];
-            var beds = detailsNodes[2];
-            var baths = detailsNodes[3];
+            string guests = null;
+            string bedrooms = null;
+            string beds = null;
+            string baths = null;
+            foreach (var detailsNode in detailsNodes)
+            {
+                if (detailsNode.Contains("guest"))
+                    guests = detailsNode;
+                else if (detailsNode.Contains("bedroom"))
+                    bedrooms = detailsNode;
+                else if (detailsNode.Contains("bed"))
+                    beds = detailsNode;
+                else if (detailsNode.Contains("bath"))
+                    baths = detailsNode;
+            }
+             // guests = detailsNodes[0];
+             // bedrooms = detailsNodes[1];
+             // beds = detailsNodes[2];
+             // baths = detailsNodes[3];
             var desc = (string)obj.SelectToken("$..sections[?(@.sectionId=='DESCRIPTION_DEFAULT')].section.htmlDescription.htmlText");
             var imgs = obj.SelectToken("$..sections[?(@.sectionId=='PHOTO_TOUR_SCROLLABLE_MODAL')].section.mediaItems").Select(x => (string)x.SelectToken("baseUrl")).ToList();
             var ammenities = obj.SelectToken("$..seeAllAmenitiesGroups").SelectMany(x => x.SelectToken("amenities")).Select(x => (string)x.SelectToken("title")).ToList();
@@ -300,6 +319,7 @@ namespace AirbnbTest.Services
                 CleanlinessRating = cleanlinessRating,
                 CommunicationRating = communicationRating,
                 LocationRating = locationRating,
+                ValueRating = valueRating,
                 ReviewsCount = reviewsCount,
                 IsSuperHost = isSuperHost
             };
@@ -345,6 +365,8 @@ namespace AirbnbTest.Services
         {
             Notifier.Display("Started working");
 
+
+           // await GetDetails("686466905719532268");
             // var nights = await GetAvailability("29876738");
             // nights = await nights.Parallel(20, (x) => GetPrice("29876738", x),false);
             // nights.Save();
@@ -353,24 +375,34 @@ namespace AirbnbTest.Services
             //var t = File.ReadAllLines("ids").ToHashSet().Count;
             //await Search("");
             // var locationId= await Autocomplete("Tunis");
-            var locationId = await Autocomplete("Colorado Springs, CO");
-            // var priceRanges = await CreateFilters(locationId);
-            // priceRanges.Save();
-            var priceRanges = nameof(PriceRange).Load<PriceRange>();
-            Notifier.Log(JsonConvert.SerializeObject(priceRanges, Formatting.Indented));
-
-            var urls = CreateSearchUrls(locationId, priceRanges);
-            var listingsIds = await urls.Parallel(_threads, Search, false);
-            File.WriteAllLines("ids", listingsIds);
-            var results = await listingsIds.Parallel(_threads, GetDetails, false);
-            foreach (var property in results)
-            {
-                var nights = await GetAvailability(property.ListingId);
-                nights = await nights.Parallel(_threads, (x) => GetPrice(property.ListingId, x), false);
-                property.Availability = string.Join("\n", nights.Select(x => $"{x.DateTime:MM/dd/yyyy} : {x.Price}"));
-            }
-
-            results.Save();
+            
+            
+            //  var locationId = await Autocomplete("Colorado Springs, CO");
+            // // // var priceRanges = await CreateFilters(locationId);
+            // // // priceRanges.Save();
+            // var priceRanges = nameof(PriceRange).Load<PriceRange>();
+            // Notifier.Log(JsonConvert.SerializeObject(priceRanges, Formatting.Indented));
+            //
+            // var urls = CreateSearchUrls(locationId, priceRanges);
+            // var listingsIds = await urls.Parallel(_threads, Search, false);
+            // File.WriteAllLines("ids", listingsIds);
+            // var results = await listingsIds.Parallel(_threads, GetDetails, false);
+            // results.Save();
+            
+            
+             var results = nameof(Property).Load<Property>();
+             Notifier.Log($"Start getting nights rate");
+             for (var i = 0; i < 10; i++)
+             {
+                 Notifier.Log($"{i+1}/{results.Count}");
+                 var property = results[i];
+                 var nights = await GetAvailability(property.ListingId);
+                 nights = await nights.Parallel(_threads, (x) => GetPrice(property.ListingId, x), false);
+                 property.Availability = string.Join("\n", nights.Select(x => $"{x.DateTime:MM/dd/yyyy} : {x.Price}"));
+             }
+            
+             results.Save();
+            await results.SaveToExcel("outputSample.xlsx");
             Notifier.Display("Completed working");
         }
     }
